@@ -27,12 +27,13 @@ import torch.optim as optim
 import torchvision.transforms as transforms
 import models.cifar as models
 import models.non_cifar as non_cifar_models
-
 from tqdm import tqdm
 
 from utils import Bar, Logger, AverageMeter, accuracy, mkdir_p, savefig, closefig
 import dataset_utils, large_dataset_utils
 from loss import SelfAdativeTraining, deep_gambler_loss
+
+from sac import SelectiveAccuracyConstraint
 
 model_names = ("vgg16","vgg16_bn","resnet34", "EfficientNet", "resnext50_32x4d", "regnet_x_400mf", "regnet_x_800mf", "regnet_x_1_6gf", "shufflenet_v2_x1_0", "shufflenet_v2_x1_5")
 
@@ -360,19 +361,20 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda):
     top1 = AverageMeter()
     top5 = AverageMeter()
     end = time.time()
-
+    sacmtr = SelectiveAccuracyConstraint()
+    
     bar = Bar('Processing', max=len(trainloader))
     print("TrainLoader Length:", len(trainloader))
     for batch_idx,  batch_data in tqdm(enumerate(trainloader)):
         inputs, targets, indices = batch_data
         # measure data loading time
         data_time.update(time.time() - end)
-
         if use_cuda:
             inputs, targets = inputs.cuda(), targets.cuda()
         inputs, targets = torch.autograd.Variable(inputs), torch.autograd.Variable(targets)
         # compute output
         outputs = model(inputs)
+        smout = F.softmax(outputs, dim=-1).detach()
         if epoch >= args.pretrain:
             if args.loss == 'gambler':
                 loss = criterion(outputs, targets, reward)
@@ -388,6 +390,11 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda):
                 loss = F.cross_entropy(outputs, targets)
             else:
                 loss = F.cross_entropy(outputs[:, :-1], targets)
+        if args.loss == "ce":
+            maxv, maxidx = smout.max(dim=-1)
+            sacmtr.update(maxv, maxidx == targets)
+        elif args.loss == "sat" or args.loss == "sat_entropy":
+            sacmtr.update(1-smout[:, -1], smout[:, :-1].argmax(dim=-1) == targets)
 
         # measure accuracy and record loss
         if args.dataset != 'catsdogs':
@@ -423,6 +430,8 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda):
                     )
         bar.next()
     bar.finish()
+    sacv = sacmtr.compute()
+    print(f"train:{sacv=}")
     return (losses.avg, top1.avg)
 
 def test(testloader, model, criterion, epoch, use_cuda, evaluation = False):
@@ -439,6 +448,7 @@ def test(testloader, model, criterion, epoch, use_cuda, evaluation = False):
     losses = AverageMeter()
     top1 = AverageMeter()
     top5 = AverageMeter()
+    sacmtr = SelectiveAccuracyConstraint()
 
     model.eval()
 
@@ -460,6 +470,8 @@ def test(testloader, model, criterion, epoch, use_cuda, evaluation = False):
             output_logits = model(inputs).cpu()
             outputs = output_logits
             values, predictions = outputs.data.max(1)
+            smout = F.softmax(output_logits, dim=-1).detach()
+
             if epoch >= args.pretrain:
                 # calculate loss
                 if args.loss == 'gambler':
@@ -468,6 +480,7 @@ def test(testloader, model, criterion, epoch, use_cuda, evaluation = False):
                     loss = F.cross_entropy(outputs[:, :-1], targets)
                 else:
                     loss = criterion(outputs, targets)
+
                 outputs = F.softmax(outputs, dim=1)
                 if args.loss == 'ce':
                     outputs, reservation = outputs, (outputs * torch.log(outputs)).sum(-1) # Reservation is neg. entropy here. 
@@ -483,6 +496,12 @@ def test(testloader, model, criterion, epoch, use_cuda, evaluation = False):
                     loss = F.cross_entropy(outputs.cpu(), targets)
                 else:
                     loss = F.cross_entropy(outputs[:,:-1].cpu(), targets)
+            if args.loss == 'sat' or args.loss == 'sat_entropy':
+                sacmtr.update(1-smout[:, -1], smout[:, :-1].argmax(dim=-1) == targets)
+            else:
+                maxv, maxidx = outputs.max(dim=-1)
+                sacmtr.update(maxv, maxidx == targets)
+
 
             # measure accuracy and record loss
             if args.dataset != 'catsdogs':
@@ -535,6 +554,9 @@ def test(testloader, model, criterion, epoch, use_cuda, evaluation = False):
             covered_correct = sorted_correct[:round(size/100*coverage)]
             print('{:.0f}: {:.3f}, '.format(coverage, sum(covered_correct)/len(covered_correct)*100.), end='')
         print('')
+    
+    sacv = sacmtr.compute()
+    print(f"test:{sacv=}")
     return (losses.avg, top1.avg)
 
 def adjust_learning_rate(optimizer, epoch):
