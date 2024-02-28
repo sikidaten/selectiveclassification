@@ -34,6 +34,8 @@ import dataset_utils, large_dataset_utils
 from loss import SelfAdativeTraining, deep_gambler_loss
 
 from sac import SelectiveAccuracyConstraint
+from torch.utils.tensorboard import SummaryWriter
+import pickle as pkl
 
 model_names = ("vgg16","vgg16_bn","resnet34", "EfficientNet", "resnext50_32x4d", "regnet_x_400mf", "regnet_x_800mf", "regnet_x_1_6gf", "shufflenet_v2_x1_0", "shufflenet_v2_x1_5")
 
@@ -88,7 +90,6 @@ parser.add_argument('--arch', '-a', metavar='ARCH', default='vgg16_bn',
 parser.add_argument('--manualSeed', type=int, help='manual seed')
 parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
                     help='evaluate trained models on validation set, following the paths defined by "save", "arch" and "rewards"')
-
 args = parser.parse_args()
 state = {k: v for k, v in args._get_kwargs()}
 
@@ -290,7 +291,8 @@ def main():
         model = non_cifar_models.__dict__[args.arch](num_classes=num_classes if args.loss == 'ce' else num_classes+1)
     else:
         model = models.__dict__[args.arch](num_classes=num_classes if args.loss == 'ce' else num_classes+1, input_size=input_size)
-
+    # import torchvision
+    # model = torchvision.models.get_model(args.arch, num_classes=num_classes if args.loss == 'ce' else num_classes+1)
     if use_cuda: model = torch.nn.DataParallel(model.cuda())
     cudnn.benchmark = True
     print('    Total params: %.2fM' % (sum(p.numel() for p in model.parameters())/1000000.0))
@@ -309,6 +311,9 @@ def main():
     title = args.dataset + '-' + args.arch + ' o={:.2f}'.format(reward)
     logger = Logger(os.path.join(save_path, 'eval.txt' if args.evaluate else 'log.txt'), title=title)
     logger.set_names(['Epoch', 'Learning Rate', 'Train Loss', 'Test Loss', 'Train Err.', 'Test Err.'])
+    useschedule = True
+    writer.add_text("hyp", f"{args.lr=},{optimizer=},{args.arch=},{args.loss=},{args.dataset=},{useschedule=}")
+
 
     # if only for evaluation, the training part will not be executed
     if args.evaluate:
@@ -321,7 +326,8 @@ def main():
 
     # train
     for epoch in range(0, args.epochs):
-        adjust_learning_rate(optimizer, epoch)
+        if useschedule:
+            adjust_learning_rate(optimizer, epoch)
         print('\n'+save_path)
         print('Epoch: [%d | %d] LR: %f' % (epoch + 1, args.epochs, state['lr']))
 
@@ -365,6 +371,7 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda):
     
     bar = Bar('Processing', max=len(trainloader))
     print("TrainLoader Length:", len(trainloader))
+    epochembed = np.zeros((len(trainloader.dataset), num_classes if args.loss == "ce" else num_classes+1))
     for batch_idx,  batch_data in tqdm(enumerate(trainloader)):
         inputs, targets, indices = batch_data
         # measure data loading time
@@ -374,6 +381,7 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda):
         inputs, targets = torch.autograd.Variable(inputs), torch.autograd.Variable(targets)
         # compute output
         outputs = model(inputs)
+        epochembed[indices.numpy()] = outputs.cpu().detach().numpy()
         smout = F.softmax(outputs, dim=-1).detach()
         if epoch >= args.pretrain:
             if args.loss == 'gambler':
@@ -432,6 +440,10 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda):
     bar.finish()
     sacv = sacmtr.compute()
     print(f"train:{sacv=}")
+    writer.add_scalar("train/loss", losses.avg, epoch)
+    writer.add_scalar("train/top1", top1.avg, epoch)
+    writer.add_scalar("train/sac", sacv, epoch)
+    embeds['train'].append(epochembed)
     return (losses.avg, top1.avg)
 
 def test(testloader, model, criterion, epoch, use_cuda, evaluation = False):
@@ -456,6 +468,7 @@ def test(testloader, model, criterion, epoch, use_cuda, evaluation = False):
     bar = Bar('Processing', max=len(testloader))
     abstention_results = []
     sr_results = []
+    epochembed = np.zeros((len(testloader.dataset), num_classes if args.loss == "ce" else num_classes+1))
     for batch_idx, batch_data in enumerate(testloader):
         inputs, targets, indices = batch_data
         # measure data loading time
@@ -469,6 +482,7 @@ def test(testloader, model, criterion, epoch, use_cuda, evaluation = False):
         with torch.no_grad():
             output_logits = model(inputs).cpu()
             outputs = output_logits
+            epochembed[indices.numpy()] = outputs.cpu().detach().numpy()
             values, predictions = outputs.data.max(1)
             smout = F.softmax(output_logits, dim=-1).detach()
 
@@ -557,6 +571,10 @@ def test(testloader, model, criterion, epoch, use_cuda, evaluation = False):
     
     sacv = sacmtr.compute()
     print(f"test:{sacv=}")
+    writer.add_scalar("test/loss", losses.avg, epoch)
+    writer.add_scalar("test/top1", top1.avg, epoch)
+    writer.add_scalar("test/sac", sacv, epoch)
+    embeds['test'].append(epochembed)
     return (losses.avg, top1.avg)
 
 def adjust_learning_rate(optimizer, epoch):
@@ -641,7 +659,10 @@ if __name__ == '__main__':
     else:
         base_path = os.path.join(args.save, args.dataset, args.loss, args.arch)
 
-        
+    import time
+    tfname = base_path.replace("/", "_")[2:]
+    writer = SummaryWriter(log_dir=f"tflog1/{tfname}_{int(time.time())}")
+    embeds = {'train':[],'test':[]}
     baseLR = state['lr']
     base_pretrain = args.pretrain
     resume_path = ""
@@ -667,3 +688,6 @@ if __name__ == '__main__':
                 args.pretrain = 50
         
         main()
+    for phase in ["train", "test"]:
+        with open(f"{save_path}/embeds_{phase}.pkl", "wb") as f:
+            pkl.dump(np.concatenate(embeds[phase]), f)
