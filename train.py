@@ -86,6 +86,8 @@ parser.add_argument('--arch', '-a', metavar='ARCH', default='vgg16_bn',
                     help='model architecture: ' +
                         ' | '.join(model_names) +
                         ' (default: vgg16_bn) Please edit the code to train with other architectures')
+# optim
+parser.add_argument('--optim', default='sgdori', type=str, help='optimzer')
 # Miscs
 parser.add_argument('--manualSeed', type=int, help='manual seed')
 parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
@@ -305,13 +307,18 @@ def main():
     elif args.loss == 'sat' or args.loss == 'sat_entropy':
         criterion = SelfAdativeTraining(num_examples=len(trainset), num_classes=num_classes, mom=args.sat_momentum)
     # the conventional loss is replaced by the gambler's loss in train() and test() explicitly except for pretraining
-    optimizer = optim.SGD(model.parameters(), lr=state['lr'], momentum=args.momentum, weight_decay=args.weight_decay)
+    if args.optim == "sgdori":
+        optimizer = optim.SGD(model.parameters(), lr=state['lr'], momentum=args.momentum, weight_decay=args.weight_decay)
+    elif args.optim == "adam":
+        optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    else:
+        assert False, f"Specify correct optimizer. '{args.optim}'"
 
 
     title = args.dataset + '-' + args.arch + ' o={:.2f}'.format(reward)
     logger = Logger(os.path.join(save_path, 'eval.txt' if args.evaluate else 'log.txt'), title=title)
     logger.set_names(['Epoch', 'Learning Rate', 'Train Loss', 'Test Loss', 'Train Err.', 'Test Err.'])
-    useschedule = True
+    useschedule = args.optim == "sgdori"
     writer.add_text("hyp", f"{args.lr=},{optimizer=},{args.arch=},{args.loss=},{args.dataset=},{useschedule=}")
 
 
@@ -343,7 +350,7 @@ def main():
         
         # append logger file
         logger.append([epoch+1, state['lr'], train_loss, test_loss, 100-train_acc, 100-test_acc])
-
+        torch.save(model.state_dict(), f"{save_path}/{epoch}.pth")
     # save the model
     filepath = os.path.join(save_path, "{:d}".format(args.epochs) + ".pth")
     torch.save(model, filepath)
@@ -653,16 +660,16 @@ def bisection_method(score, correct, results):
 if __name__ == '__main__':
     if args.loss == 'sat_entropy':
         if args.mode == 'tuning':
-            base_path = os.path.join(args.save, args.dataset, args.loss, args.mode, f'entropy_coeff-{str(args.entropy)}', args.arch)
+            base_path = os.path.join(args.save, args.dataset, args.loss, args.optim, args.mode, f'entropy_coeff-{str(args.entropy)}', args.arch)
         else:
-            base_path = os.path.join(args.save, args.dataset, args.loss, f'entropy_coeff-{str(args.entropy)}', args.arch)
+            base_path = os.path.join(args.save, args.dataset, args.loss, args.optim, f'entropy_coeff-{str(args.entropy)}', args.arch)
     else:
-        base_path = os.path.join(args.save, args.dataset, args.loss, args.arch)
+        base_path = os.path.join(args.save, args.dataset, args.loss, args.optim, args.arch)
 
     import time
     tfname = base_path.replace("/", "_")[2:]
     writer = SummaryWriter(log_dir=f"tflog1/{tfname}_{int(time.time())}")
-    embeds = {'train':[],'test':[]}
+    embeds = {'train': [], 'test': []}
     baseLR = state['lr']
     base_pretrain = args.pretrain
     resume_path = ""
