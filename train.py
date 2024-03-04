@@ -291,12 +291,14 @@ def main():
     # Model
     print("==> creating model '{}'".format(args.arch))
 
-    if "cifar" not in args.dataset:
-        model = non_cifar_models.__dict__[args.arch](num_classes=num_classes if args.loss == 'ce' else num_classes+1)
+    if args.ppm == "True":
+        if "cifar" not in args.dataset:
+            model = non_cifar_models.__dict__[args.arch](num_classes=num_classes if args.loss == 'ce' else num_classes+1)
+        else:
+            model = models.__dict__[args.arch](num_classes=num_classes if args.loss == 'ce' else num_classes+1, input_size=input_size)
     else:
-        model = models.__dict__[args.arch](num_classes=num_classes if args.loss == 'ce' else num_classes+1, input_size=input_size)
-    # import torchvision
-    # model = torchvision.models.get_model(args.arch, num_classes=num_classes if args.loss == 'ce' else num_classes+1)
+        import torchvision
+        model = torchvision.models.get_model(args.arch, num_classes=num_classes if args.loss == 'ce' else num_classes+1)
     if use_cuda: model = torch.nn.DataParallel(model.cuda())
     cudnn.benchmark = True
     print('    Total params: %.2fM' % (sum(p.numel() for p in model.parameters())/1000000.0))
@@ -323,7 +325,7 @@ def main():
     logger = Logger(os.path.join(save_path, 'eval.txt' if args.evaluate else 'log.txt'), title=title)
     logger.set_names(['Epoch', 'Learning Rate', 'Train Loss', 'Test Loss', 'Train Err.', 'Test Err.'])
     useschedule = args.optim == "sgdori"
-    writer.add_text("hyp", f"{args.lr=},{optimizer=},{args.arch=},{args.loss=},{args.dataset=},{useschedule=}")
+    writer.add_text("hyp", f"{args.lr=},{optimizer=},{args.arch=},{args.loss=},{args.dataset=},{useschedule=},{args.ppm=}")
 
 
     # if only for evaluation, the training part will not be executed

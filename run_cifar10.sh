@@ -9,6 +9,7 @@
 
 mkdir -p ./log
 
+PPM=False
 ARCH=vgg16_bn
 LOSS=ce
 DATASET=cifar10
@@ -33,9 +34,9 @@ done
 SAVE_DIR='./log/'${DATASET}_${ARCH}_${LOSS}_seed-${seed}
 
 ### train
-python -u train.py --arch ${ARCH} --pretrain ${PRETRAIN} --sat-momentum ${MOM} \
+python3 -u train.py --arch ${ARCH} --pretrain ${PRETRAIN} --sat-momentum ${MOM} \
        --loss ${LOSS} --manualSeed ${seed}\
-       --dataset ${DATASET} --save ${SAVE_DIR}  --optim ${OPTIM} #\
+       --dataset ${DATASET} --save ${SAVE_DIR}  --optim ${OPTIM} --ppm ${PPM}#\
        #2>&1 | tee -a ${SAVE_DIR}.log
 
 ### eval
