@@ -356,7 +356,7 @@ def main():
         
         # append logger file
         logger.append([epoch+1, state['lr'], train_loss, test_loss, 100-train_acc, 100-test_acc])
-        torch.save(model.state_dict(), f"{save_path}/{epoch}.pth")
+        #torch.save(model.state_dict(), f"{save_path}/{epoch}.pth")
     # save the model
     filepath = os.path.join(save_path, "{:d}".format(args.epochs) + ".pth")
     torch.save(model, filepath)
