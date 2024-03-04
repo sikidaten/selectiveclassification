@@ -36,6 +36,7 @@ from loss import SelfAdativeTraining, deep_gambler_loss
 from sac import SelectiveAccuracyConstraint
 from torch.utils.tensorboard import SummaryWriter
 import pickle as pkl
+from sam import SAM
 
 model_names = ("vgg16","vgg16_bn","resnet34", "EfficientNet", "resnext50_32x4d", "regnet_x_400mf", "regnet_x_800mf", "regnet_x_1_6gf", "shufflenet_v2_x1_0", "shufflenet_v2_x1_5")
 
@@ -88,6 +89,7 @@ parser.add_argument('--arch', '-a', metavar='ARCH', default='vgg16_bn',
                         ' (default: vgg16_bn) Please edit the code to train with other architectures')
 # optim
 parser.add_argument('--optim', default='sgdori', type=str, help='optimzer')
+parser.add_argument('--ppm', type=str, help='use paper model')
 # Miscs
 parser.add_argument('--manualSeed', type=int, help='manual seed')
 parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
@@ -311,6 +313,8 @@ def main():
         optimizer = optim.SGD(model.parameters(), lr=state['lr'], momentum=args.momentum, weight_decay=args.weight_decay)
     elif args.optim == "adam":
         optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    elif args.optim == "sam":
+        optimizer = SAM(model.parameters(),torch.optim.SGD,lr=0.1,momentum=0.9)
     else:
         assert False, f"Specify correct optimizer. '{args.optim}'"
 
@@ -380,6 +384,10 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda):
     print("TrainLoader Length:", len(trainloader))
     epochembed = np.zeros((len(trainloader.dataset), num_classes if args.loss == "ce" else num_classes+1))
     for batch_idx,  batch_data in tqdm(enumerate(trainloader)):
+        def closure():
+            loss=criterion(model(inputs),targets)
+            loss.backward()
+            return loss
         inputs, targets, indices = batch_data
         # measure data loading time
         data_time.update(time.time() - end)
@@ -425,7 +433,10 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda):
         # compute gradient and do SGD step
         optimizer.zero_grad()
         loss.backward()
-        optimizer.step()
+        if args.optim == "sam":
+            optimizer.step(closure = closure)
+        else:
+            optimizer.step()
 
         # measure elapsed time
         batch_time.update(time.time() - end)
