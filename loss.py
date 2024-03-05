@@ -70,4 +70,4 @@ class SelfAdativeTraining():
         return torch.mean(loss)
 
 def maxloss(logits,y,index):
-    return F.relu(logits.max(dim=-1)[0].flatten()-torch.gather(x,1,y.unsqueeze(-1)).flatten()).mean()
+    return F.relu(logits.max(dim=-1)[0].flatten()-torch.gather(logits,1,y.unsqueeze(-1)).flatten()).mean()
