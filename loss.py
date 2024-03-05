@@ -69,5 +69,5 @@ class SelfAdativeTraining():
         loss = torch.sum(-F.log_softmax(logits, dim=1) * soft_label, dim=1)
         return torch.mean(loss)
 
-def maxloss(logits,y,index):
+def maxloss(logits,y):
     return F.relu(logits.max(dim=-1)[0].flatten()-torch.gather(logits,1,y.unsqueeze(-1)).flatten()).mean()
