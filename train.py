@@ -102,14 +102,20 @@ expected_coverage = args.coverage
 reward_list = args.rewards
 
 # Use CUDA
-use_cuda = torch.cuda.is_available()
+if torch.cuda.is_available():
+    device="cuda"
+elif torch.backends.mps.is_available():
+    device="mps"
+else:
+    device="cpu"
+
 
 # Random seed
 if args.manualSeed is None:
     args.manualSeed = random.randint(1, 10000)
 random.seed(args.manualSeed)
 torch.manual_seed(args.manualSeed)
-if use_cuda:
+if device=="cuda":
     torch.cuda.manual_seed_all(args.manualSeed)
 
 num_classes=10 # this is modified later in main() when defining the specific datasets
@@ -299,7 +305,7 @@ def main():
     else:
         import torchvision
         model = torchvision.models.get_model(args.arch, num_classes=num_classes if fami_ce else num_classes+1)
-    if use_cuda: model = torch.nn.DataParallel(model.cuda())
+    model = torch.nn.DataParallel(model.to(device))
     cudnn.benchmark = True
     print('    Total params: %.2fM' % (sum(p.numel() for p in model.parameters())/1000000.0))
 
@@ -337,8 +343,8 @@ def main():
         print('\nEvaluation only')
         assert os.path.isfile(resume_path), 'no model exists at "{}"'.format(resume_path)
         model = torch.load(resume_path)
-        if use_cuda: model = model.cuda()
-        test(testloader, model, criterion, args.epochs, use_cuda, evaluation=True)
+        model = model.to(device)
+        test(testloader, model, criterion, args.epochs, device, evaluation=True)
         return
 
     # train
@@ -348,8 +354,8 @@ def main():
         print('\n'+save_path)
         print('Epoch: [%d | %d] LR: %f' % (epoch + 1, args.epochs, state['lr']))
 
-        train_loss, train_acc = train(trainloader, model, criterion, optimizer, epoch, use_cuda)
-        test_loss, test_acc = test(testloader, model, criterion, epoch, use_cuda)
+        train_loss, train_acc = train(trainloader, model, criterion, optimizer, epoch, device)
+        test_loss, test_acc = test(testloader, model, criterion, epoch, device)
         print(train_acc, test_acc)
 
 
@@ -374,7 +380,7 @@ def main():
     closefig()
     logger.close()
 
-def train(trainloader, model, criterion, optimizer, epoch, use_cuda):
+def train(trainloader, model, criterion, optimizer, epoch, device):
     # switch to train mode
     model.train()
 
@@ -397,8 +403,7 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda):
         inputs, targets, indices = batch_data
         # measure data loading time
         data_time.update(time.time() - end)
-        if use_cuda:
-            inputs, targets = inputs.cuda(), targets.cuda()
+        inputs, targets = inputs.to(device), targets.to(device)
         inputs, targets = torch.autograd.Variable(inputs), torch.autograd.Variable(targets)
         # compute output
         outputs = model(inputs)
@@ -470,12 +475,12 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda):
     embeds['train'].append(epochembed)
     return (losses.avg, top1.avg)
 
-def test(testloader, model, criterion, epoch, use_cuda, evaluation = False):
+def test(testloader, model, criterion, epoch, device, evaluation = False):
     global best_acc
 
     # whether to evaluate uncertainty, or confidence
     if evaluation:
-        evaluate(testloader, model, use_cuda)
+        evaluate(testloader, model, device)
         return
 
     # switch to test mode
@@ -498,8 +503,7 @@ def test(testloader, model, criterion, epoch, use_cuda, evaluation = False):
         # measure data loading time
         data_time.update(time.time() - end)
 
-        if use_cuda:
-            inputs = inputs.cuda()
+        inputs = inputs.to(device)
         inputs, targets = torch.autograd.Variable(inputs), torch.autograd.Variable(targets)
 
         # compute output
@@ -609,15 +613,14 @@ def adjust_learning_rate(optimizer, epoch):
             param_group['lr'] = state['lr']
             
 # this function is used to evaluate the accuracy on test set per coverage
-def evaluate(testloader, model, use_cuda):
+def evaluate(testloader, model, device):
     model.eval()
     abortion_results = [[],[]]
     sr_results = [[],[]]
     with torch.no_grad():
         for batch_idx, batch_data in enumerate(testloader):
             inputs, targets = batch_data[:2]
-            if use_cuda:
-                inputs, targets = inputs.cuda(), targets
+            inputs, targets = inputs.to(device), targets
             output_logits = model(inputs)
             output = F.softmax(output_logits,dim=1)
             if fami_ce:
