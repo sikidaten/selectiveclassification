@@ -293,12 +293,12 @@ def main():
 
     if args.ppm == "True":
         if "cifar" not in args.dataset:
-            model = non_cifar_models.__dict__[args.arch](num_classes=num_classes if args.loss == 'ce' else num_classes+1)
+            model = non_cifar_models.__dict__[args.arch](num_classes=num_classes if fami_ce else num_classes+1)
         else:
-            model = models.__dict__[args.arch](num_classes=num_classes if args.loss == 'ce' else num_classes+1, input_size=input_size)
+            model = models.__dict__[args.arch](num_classes=num_classes if fami_ce else num_classes+1, input_size=input_size)
     else:
         import torchvision
-        model = torchvision.models.get_model(args.arch, num_classes=num_classes if args.loss == 'ce' else num_classes+1)
+        model = torchvision.models.get_model(args.arch, num_classes=num_classes if fami_ce else num_classes+1)
     if use_cuda: model = torch.nn.DataParallel(model.cuda())
     cudnn.benchmark = True
     print('    Total params: %.2fM' % (sum(p.numel() for p in model.parameters())/1000000.0))
@@ -388,7 +388,7 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda):
     
     bar = Bar('Processing', max=len(trainloader))
     print("TrainLoader Length:", len(trainloader))
-    epochembed = np.zeros((len(trainloader.dataset), num_classes if args.loss == "ce" else num_classes+1))
+    epochembed = np.zeros((len(trainloader.dataset), num_classes if fami_ce else num_classes+1))
     for batch_idx,  batch_data in tqdm(enumerate(trainloader)):
         def closure():
             loss=criterion(model(inputs),targets)
@@ -415,11 +415,11 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda):
             else:
                 loss = criterion(outputs, targets)
         else:
-            if args.loss == 'ce':
-                loss = F.cross_entropy(outputs, targets)
+            if fami_ce:
+                loss = criterion(outputs, targets)
             else:
                 loss = F.cross_entropy(outputs[:, :-1], targets)
-        if args.loss == "ce":
+        if fami_ce:
             maxv, maxidx = smout.max(dim=-1)
             sacmtr.update(maxv, maxidx == targets)
         elif args.loss == "sat" or args.loss == "sat_entropy":
@@ -492,7 +492,7 @@ def test(testloader, model, criterion, epoch, use_cuda, evaluation = False):
     bar = Bar('Processing', max=len(testloader))
     abstention_results = []
     sr_results = []
-    epochembed = np.zeros((len(testloader.dataset), num_classes if args.loss == "ce" else num_classes+1))
+    epochembed = np.zeros((len(testloader.dataset), num_classes if fami_ce else num_classes+1))
     for batch_idx, batch_data in enumerate(testloader):
         inputs, targets, indices = batch_data
         # measure data loading time
@@ -520,7 +520,7 @@ def test(testloader, model, criterion, epoch, use_cuda, evaluation = False):
                     loss = criterion(outputs, targets)
 
                 outputs = F.softmax(outputs, dim=1)
-                if args.loss == 'ce':
+                if fami_ce:
                     outputs, reservation = outputs, (outputs * torch.log(outputs)).sum(-1) # Reservation is neg. entropy here. 
                 else:
                     outputs, reservation = outputs[:,:-1], outputs[:,-1]
@@ -530,8 +530,8 @@ def test(testloader, model, criterion, epoch, use_cuda, evaluation = False):
                 pred_logits = nn.functional.softmax(output_logits[:,:-1], -1)
                 sr_results.extend(zip(list(pred_logits.max(-1)[0].numpy()), list( predictions.eq(targets.data).numpy() )))
             else:
-                if args.loss == 'ce':
-                    loss = F.cross_entropy(outputs.cpu(), targets)
+                if fami_ce:
+                    loss = criterion(outputs.cpu(), targets)
                 else:
                     loss = F.cross_entropy(outputs[:,:-1].cpu(), targets)
             if args.loss == 'sat' or args.loss == 'sat_entropy':
@@ -620,7 +620,7 @@ def evaluate(testloader, model, use_cuda):
                 inputs, targets = inputs.cuda(), targets
             output_logits = model(inputs)
             output = F.softmax(output_logits,dim=1)
-            if args.loss == 'ce':
+            if fami_ce:
                 reservation = 1 - output.data.max(1)[0].cpu()
             else:
                 output, reservation = output[:,:-1], (output[:,-1]).cpu()
@@ -675,6 +675,7 @@ def bisection_method(score, correct, results):
 
 
 if __name__ == '__main__':
+    fami_ce=args.loss in ['ce','max']
     import time
     with open("first-names.txt") as f:
         names = [l.strip() for l in f.readlines()]
