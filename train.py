@@ -671,9 +671,11 @@ def bisection_method(score, correct, results):
 
 
 if __name__ == '__main__':
-    import random
+    import time
     with open("first-names.txt") as f:
-        name=random.choice([l.strip() for l in f.readlines()])
+        names = [l.strip() for l in f.readlines()]
+    nameidx = int(time.time())%len(names)
+    name = names[nameidx]
     if args.loss == 'sat_entropy':
         if args.mode == 'tuning':
             base_path = "_".join([args.dataset, args.loss, args.optim, args.mode, f'entropy_coeff-{str(args.entropy)}', args.arch])
