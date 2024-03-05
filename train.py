@@ -31,7 +31,7 @@ from tqdm import tqdm
 
 from utils import Bar, Logger, AverageMeter, accuracy, mkdir_p, savefig, closefig
 import dataset_utils, large_dataset_utils
-from loss import SelfAdativeTraining, deep_gambler_loss
+from loss import SelfAdativeTraining, deep_gambler_loss, maxloss
 
 from sac import SelectiveAccuracyConstraint
 from torch.utils.tensorboard import SummaryWriter
@@ -310,6 +310,8 @@ def main():
         criterion = deep_gambler_loss
     elif args.loss == 'sat' or args.loss == 'sat_entropy':
         criterion = SelfAdativeTraining(num_examples=len(trainset), num_classes=num_classes, mom=args.sat_momentum)
+    elif args.loss == "max":
+        criterion = maxloss
     # the conventional loss is replaced by the gambler's loss in train() and test() explicitly except for pretraining
     if args.optim == "sgdori":
         optimizer = optim.SGD(model.parameters(), lr=state['lr'], momentum=args.momentum, weight_decay=args.weight_decay)
