@@ -671,17 +671,20 @@ def bisection_method(score, correct, results):
 
 
 if __name__ == '__main__':
+    import random
+    with open("first-names.txt") as f:
+        name=random.choice([l.strip() for l in f.readlines()])
     if args.loss == 'sat_entropy':
         if args.mode == 'tuning':
-            base_path = os.path.join(args.save, args.dataset, args.loss, args.optim, args.mode, f'entropy_coeff-{str(args.entropy)}', args.arch)
+            base_path = "_".join([args.dataset, args.loss, args.optim, args.mode, f'entropy_coeff-{str(args.entropy)}', args.arch])
         else:
-            base_path = os.path.join(args.save, args.dataset, args.loss, args.optim, f'entropy_coeff-{str(args.entropy)}', args.arch)
+            base_path = "_".join([args.dataset, args.loss, args.optim, f'entropy_coeff-{str(args.entropy)}', args.arch])
     else:
-        base_path = os.path.join(args.save, args.dataset, args.loss, args.optim, args.arch)
+        base_path = "_".join([args.dataset, args.loss, args.optim, args.arch])
 
-    import time
-    tfname = base_path.replace("/", "_")[2:]
-    writer = SummaryWriter(log_dir=f"tflog1/{tfname}_{int(time.time())}")
+    base_path=f"log/{name}_{base_path}"
+    tfname = base_path
+    writer = SummaryWriter(log_dir=f"tflog1/{tfname}")
     embeds = {'train': [], 'test': []}
     baseLR = state['lr']
     base_pretrain = args.pretrain
