@@ -83,7 +83,7 @@ parser.add_argument('--loss', default='max', type=str,
 parser.add_argument('--entropy', type=float, default=0.0, help='Entropy Coefficient for the SAT Loss (default: 0.0)') 
 # Architecture
 parser.add_argument('--arch', '-a', metavar='ARCH', default='resnet34',
-                    choices=model_names,
+                    # choices=model_names,
                     help='model architecture: ' +
                         ' | '.join(model_names) +
                         ' (default: vgg16_bn) Please edit the code to train with other architectures')
