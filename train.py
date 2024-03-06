@@ -78,18 +78,18 @@ parser.add_argument('--coverage', type=float, nargs='+',default=[100.,99.,98.,97
 # Save
 parser.add_argument('-s', '--save', default='save', type=str, metavar='PATH',
                     help='path to save checkpoint (default: save)')
-parser.add_argument('--loss', default='sat', type=str,
+parser.add_argument('--loss', default='max', type=str,
                     help='loss function (sat, ce, gambler, sat_entropy)')
 parser.add_argument('--entropy', type=float, default=0.0, help='Entropy Coefficient for the SAT Loss (default: 0.0)') 
 # Architecture
-parser.add_argument('--arch', '-a', metavar='ARCH', default='vgg16_bn',
+parser.add_argument('--arch', '-a', metavar='ARCH', default='resnet34',
                     choices=model_names,
                     help='model architecture: ' +
                         ' | '.join(model_names) +
                         ' (default: vgg16_bn) Please edit the code to train with other architectures')
 # optim
 parser.add_argument('--optim', default='sgdori', type=str, help='optimzer')
-parser.add_argument('--ppm', type=str, help='use paper model')
+parser.add_argument('--ppm', type=str,default='False', help='use paper model')
 # Miscs
 parser.add_argument('--manualSeed', type=int, help='manual seed')
 parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
@@ -692,7 +692,7 @@ if __name__ == '__main__':
     else:
         base_path = "_".join([args.dataset, args.loss, args.optim, args.arch])
 
-    base_path=f"log/{name}_{base_path}"
+    base_path=f"log/{name}_{base_path}_{args.save}"
     tfname = base_path
     writer = SummaryWriter(log_dir=f"tflog1/{tfname}")
     embeds = {'train': [], 'test': []}
