@@ -102,4 +102,3 @@ def vgg16_bn(**kwargs):
     """VGG 16-layer model (configuration "D") with batch normalization"""
     model = VGG(make_layers(cfg['D'], batch_norm=True), **kwargs)
     return model
-

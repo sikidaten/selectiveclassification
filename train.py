@@ -94,6 +94,7 @@ parser.add_argument('--ppm', type=str,default='False', help='use paper model')
 parser.add_argument('--manualSeed', type=int, help='manual seed')
 parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
                     help='evaluate trained models on validation set, following the paths defined by "save", "arch" and "rewards"')
+parser.add_argument('--dropoutrate',type=float,default=None)
 args = parser.parse_args()
 state = {k: v for k, v in args._get_kwargs()}
 
@@ -301,7 +302,11 @@ def main():
         if "cifar" not in args.dataset:
             model = non_cifar_models.__dict__[args.arch](num_classes=num_classes if fami_ce else num_classes+1)
         else:
-            model = models.__dict__[args.arch](num_classes=num_classes if fami_ce else num_classes+1, input_size=input_size)
+            if "resnetdo" in args.arch:
+                model = models.__dict__[args.arch](num_classes=num_classes if fami_ce else num_classes+1,dropout_rate=args.dropoutrate)
+            else:
+                model = models.__dict__[args.arch](num_classes=num_classes if fami_ce else num_classes+1, input_size=input_size)
+
     else:
         import torchvision
         model = torchvision.models.get_model(args.arch, num_classes=num_classes if fami_ce else num_classes+1)
@@ -335,7 +340,7 @@ def main():
     logger = Logger(os.path.join(save_path, 'eval.txt' if args.evaluate else 'log.txt'), title=title)
     logger.set_names(['Epoch', 'Learning Rate', 'Train Loss', 'Test Loss', 'Train Err.', 'Test Err.'])
     useschedule = "sgd" in args.optim
-    writer.add_text("hyp", f"{args.lr=},{optimizer=},{args.arch=},{args.loss=},{args.dataset=},{useschedule=},{args.ppm=}")
+    writer.add_text("hyp", f"{args.lr=},{optimizer=},{args.arch=},{args.loss=},{args.dataset=},{useschedule=},{args.ppm=},{args.dropoutrate=}")
 
 
     # if only for evaluation, the training part will not be executed
@@ -692,6 +697,8 @@ if __name__ == '__main__':
     else:
         base_path = "_".join([args.dataset, args.loss, args.optim, args.arch])
 
+    if args.dropoutrate:
+        base_path+=f"_do{args.dropoutrate}"
     base_path=f"log/{name}_{base_path}_{args.save}"
     tfname = base_path
     writer = SummaryWriter(log_dir=f"tflog1/{tfname}")
