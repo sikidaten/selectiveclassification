@@ -310,7 +310,8 @@ def main():
     else:
         import torchvision
         model = torchvision.models.get_model(args.arch, num_classes=num_classes if fami_ce else num_classes+1)
-    model = torch.nn.DataParallel(model.to(device))
+    model = model.to(device)
+    # model = torch.nn.DataParallel(model.to(device))
     cudnn.benchmark = True
     print('    Total params: %.2fM' % (sum(p.numel() for p in model.parameters())/1000000.0))
 
