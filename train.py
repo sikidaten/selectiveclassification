@@ -329,6 +329,8 @@ def main():
         optimizer = optim.SGD(model.parameters(), lr=state['lr'], momentum=args.momentum, weight_decay=args.weight_decay)
     elif args.optim == "sgd1e-3":
         optimizer = optim.SGD(model.parameters(), lr=1e-3, momentum=args.momentum, weight_decay=args.weight_decay)
+    elif args.optim == "sgdconst":
+        optimizer = optim.SGD(model.parameters(), lr=state['lr'], momentum=args.momentum, weight_decay=args.weight_decay)
     elif args.optim == "adam":
         optimizer = optim.Adam(model.parameters(), lr=1e-3)
     elif args.optim == "sam":
@@ -340,7 +342,7 @@ def main():
     title = args.dataset + '-' + args.arch + ' o={:.2f}'.format(reward)
     logger = Logger(os.path.join(save_path, 'eval.txt' if args.evaluate else 'log.txt'), title=title)
     logger.set_names(['Epoch', 'Learning Rate', 'Train Loss', 'Test Loss', 'Train Err.', 'Test Err.'])
-    useschedule = "sgd" in args.optim
+    useschedule = ("sgd" in args.optim) and (not args.optim in ["sgdconst"])
     writer.add_text("hyp", f"{args.lr=},{optimizer=},{args.arch=},{args.loss=},{args.dataset=},{useschedule=},{args.ppm=},{args.dropoutrate=}")
 
 
