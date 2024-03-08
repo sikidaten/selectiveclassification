@@ -92,3 +92,4 @@ from .wrn import *
 from .preresnet import *
 from .densenet import *
 from .resnetdo import *
+from .resnetdo2 import *
