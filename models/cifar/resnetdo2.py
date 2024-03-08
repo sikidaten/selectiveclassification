@@ -303,7 +303,7 @@ def _resnet(
     return model
 
 
-def resnetdo18(*, progress: bool = True, **kwargs: Any) -> ResNet:
+def resnetdo218(*, progress: bool = True, **kwargs: Any) -> ResNet:
     """ResNet-18 from `Deep Residual Learning for Image Recognition <https://arxiv.org/abs/1512.03385>`__.
 
     Args:
@@ -326,7 +326,7 @@ def resnetdo18(*, progress: bool = True, **kwargs: Any) -> ResNet:
     return _resnet(BasicBlock, [2, 2, 2, 2], progress, **kwargs)
 
 
-def resnetdo34(*, progress: bool = True, **kwargs: Any) -> ResNet:
+def resnetdo234(*, progress: bool = True, **kwargs: Any) -> ResNet:
     """ResNet-34 from `Deep Residual Learning for Image Recognition <https://arxiv.org/abs/1512.03385>`__.
 
     Args:
@@ -349,7 +349,7 @@ def resnetdo34(*, progress: bool = True, **kwargs: Any) -> ResNet:
     return _resnet(BasicBlock, [3, 4, 6, 3], progress, **kwargs)
 
 
-def resnetdo50(*, progress: bool = True, **kwargs: Any) -> ResNet:
+def resnetdo250(*, progress: bool = True, **kwargs: Any) -> ResNet:
     """ResNet-50 from `Deep Residual Learning for Image Recognition <https://arxiv.org/abs/1512.03385>`__.
 
     .. note::
@@ -377,7 +377,7 @@ def resnetdo50(*, progress: bool = True, **kwargs: Any) -> ResNet:
     return _resnet(Bottleneck, [3, 4, 6, 3], progress, **kwargs)
 
 
-def resnetdo101(*, progress: bool = True, **kwargs: Any) -> ResNet:
+def resnetdo2101(*, progress: bool = True, **kwargs: Any) -> ResNet:
     """ResNet-101 from `Deep Residual Learning for Image Recognition <https://arxiv.org/abs/1512.03385>`__.
 
     .. note::
@@ -406,7 +406,7 @@ def resnetdo101(*, progress: bool = True, **kwargs: Any) -> ResNet:
     return _resnet(Bottleneck, [3, 4, 23, 3], progress, **kwargs)
 
 
-def resnetdo152(*, progress: bool = True, **kwargs: Any) -> ResNet:
+def resnetdo2152(*, progress: bool = True, **kwargs: Any) -> ResNet:
     """ResNet-152 from `Deep Residual Learning for Image Recognition <https://arxiv.org/abs/1512.03385>`__.
 
     .. note::
@@ -435,7 +435,7 @@ def resnetdo152(*, progress: bool = True, **kwargs: Any) -> ResNet:
     return _resnet(Bottleneck, [3, 8, 36, 3], progress, **kwargs)
 
 
-def resnextdo50_32x4d(
+def resnextdo250_32x4d(
     *, progress: bool = True, **kwargs: Any
 ) -> ResNet:
     """ResNeXt-50 32x4d model from
@@ -462,7 +462,7 @@ def resnextdo50_32x4d(
     return _resnet(Bottleneck, [3, 4, 6, 3], progress, **kwargs)
 
 
-def resnextdo101_32x8d(
+def resnextdo2101_32x8d(
     *, progress: bool = True, **kwargs: Any
 ) -> ResNet:
     """ResNeXt-101 32x8d model from
@@ -489,7 +489,7 @@ def resnextdo101_32x8d(
     return _resnet(Bottleneck, [3, 4, 23, 3], progress, **kwargs)
 
 
-def resnextdo101_64x4d(
+def resnextdo2101_64x4d(
     *, progress: bool = True, **kwargs: Any
 ) -> ResNet:
     """ResNeXt-101 64x4d model from
@@ -516,7 +516,7 @@ def resnextdo101_64x4d(
     return _resnet(Bottleneck, [3, 4, 23, 3], progress, **kwargs)
 
 
-def wide_resnetdo50_2(
+def wide_resnetdo250_2(
     *, progress: bool = True, **kwargs: Any
 ) -> ResNet:
     """Wide ResNet-50-2 model from
@@ -546,7 +546,7 @@ def wide_resnetdo50_2(
     return _resnet(Bottleneck, [3, 4, 6, 3], progress, **kwargs)
 
 
-def wide_resnetdo101_2(
+def wide_resnetdo2101_2(
     *, progress: bool = True, **kwargs: Any
 ) -> ResNet:
     """Wide ResNet-101-2 model from
@@ -577,7 +577,7 @@ def wide_resnetdo101_2(
     return _resnet(Bottleneck, [3, 4, 23, 3], progress, **kwargs)
 
 if __name__=="__main__":
-    m=resnextdo101_32x8d(dropout_rate=0.2)
+    m=resnextdo2101_32x8d(dropout_rate=0.2)
     print(m)
     x=torch.randn(8,3,32,32)
     y=m(x)
