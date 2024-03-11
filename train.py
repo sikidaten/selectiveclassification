@@ -78,7 +78,7 @@ parser.add_argument('--coverage', type=float, nargs='+',default=[100.,99.,98.,97
 # Save
 parser.add_argument('-s', '--save', default='save', type=str, metavar='PATH',
                     help='path to save checkpoint (default: save)')
-parser.add_argument('--loss', default='max', type=str,
+parser.add_argument('--loss', default='ce', type=str,
                     help='loss function (sat, ce, gambler, sat_entropy)')
 parser.add_argument('--entropy', type=float, default=0.0, help='Entropy Coefficient for the SAT Loss (default: 0.0)') 
 # Architecture
@@ -403,7 +403,7 @@ def train(trainloader, model, criterion, optimizer, epoch, device):
     bar = Bar('Processing', max=len(trainloader))
     print("TrainLoader Length:", len(trainloader))
     epochembed = np.zeros((len(trainloader.dataset), num_classes if fami_ce else num_classes+1))
-    epochgrad = np.zeros((len(trainloader.dataset), num_classes if fami_ce else num_classes+1))
+    epochgrad = np.zeros((len(trainloader.dataset)))
     for batch_idx,  batch_data in tqdm(enumerate(trainloader)):
         def closure():
             loss=criterion(model(inputs),targets)
@@ -414,11 +414,10 @@ def train(trainloader, model, criterion, optimizer, epoch, device):
         # measure data loading time
         data_time.update(time.time() - end)
         inputs, targets = inputs.to(device), targets.to(device)
-        inputs, targets = torch.autograd.Variable(inputs), torch.autograd.Variable(targets)
-        grad=torch.autograd.functional.jacobian(model,inputs).reshape(B,num_classes if fami_ce else num_classes+1,-1).norm(dim=-1)
-        epochgrad[indices.numpy()] = grad.cpu().detach().numpy()
+        inputs, targets = torch.autograd.Variable(inputs,requires_grad=True), torch.autograd.Variable(targets)
         # compute output
         outputs = model(inputs)
+        outputs.retain_grad()
         epochembed[indices.numpy()] = outputs.cpu().detach().numpy()
         smout = F.softmax(outputs, dim=-1).detach()
         if epoch >= args.pretrain:
@@ -454,8 +453,12 @@ def train(trainloader, model, criterion, optimizer, epoch, device):
             top1.update(prec1.item(), inputs.size(0))
 
         # compute gradient and do SGD step
-        optimizer.zero_grad()
         loss.backward()
+
+        def bnorm(x):
+            return (x**2).sum(dim=[i for i in range(1,x.dim())]).sqrt()
+        epochgrad[indices.numpy()] = (bnorm(inputs.grad)/bnorm(outputs.grad)).cpu().detach().numpy()
+        optimizer.zero_grad()
         if args.optim == "sam":
             optimizer.step(closure = closure)
         else:
@@ -512,7 +515,7 @@ def test(testloader, model, criterion, epoch, device, evaluation = False):
     abstention_results = []
     sr_results = []
     epochembed = np.zeros((len(testloader.dataset), num_classes if fami_ce else num_classes+1))
-    epochgrad = np.zeros((len(testloader.dataset), num_classes if fami_ce else num_classes+1))
+    epochgrad = np.zeros((len(testloader.dataset)))
     for batch_idx, batch_data in enumerate(testloader):
         inputs, targets, indices = batch_data
         B,C,H,W=inputs.shape
@@ -520,15 +523,14 @@ def test(testloader, model, criterion, epoch, device, evaluation = False):
         data_time.update(time.time() - end)
 
         inputs = inputs.to(device)
-        inputs, targets = torch.autograd.Variable(inputs), torch.autograd.Variable(targets)
+        # targets = targets.to(device)
+        inputs, targets = torch.autograd.Variable(inputs,requires_grad=True), torch.autograd.Variable(targets)
 
-        grad=torch.autograd.functional.jacobian(model,inputs).reshape(B,num_classes if fami_ce else num_classes+1,-1).norm(dim=-1)
-        epochgrad[indices.numpy()] = grad.cpu().detach().numpy()
         # compute output
-        with torch.no_grad():
+        with torch.set_grad_enabled(True):
             output_logits = model(inputs).cpu()
             outputs = output_logits
-            epochembed[indices.numpy()] = outputs.cpu().detach().numpy()
+            epochembed[indices.numpy()] = outputs.detach().numpy()
             values, predictions = outputs.data.max(1)
             smout = F.softmax(output_logits, dim=-1).detach()
 
@@ -547,21 +549,29 @@ def test(testloader, model, criterion, epoch, device, evaluation = False):
                 else:
                     outputs, reservation = outputs[:,:-1], outputs[:,-1]
                 # analyze the accuracy  different abstention level
-                abstention_results.extend(zip(list( reservation.numpy() ),list( predictions.eq(targets.data).numpy() )))
+                abstention_results.extend(zip(list( reservation.detach().numpy() ),list( predictions.eq(targets.data).numpy() )))
 
                 pred_logits = nn.functional.softmax(output_logits[:,:-1], -1)
-                sr_results.extend(zip(list(pred_logits.max(-1)[0].numpy()), list( predictions.eq(targets.data).numpy() )))
+                sr_results.extend(zip(list(pred_logits.max(-1)[0].detach().numpy()), list( predictions.eq(targets.data).numpy() )))
             else:
                 if fami_ce:
-                    loss = criterion(outputs.cpu(), targets)
+                    loss = criterion(outputs, targets)
                 else:
-                    loss = F.cross_entropy(outputs[:,:-1].cpu(), targets)
+                    loss = F.cross_entropy(outputs[:,:-1], targets)
             if args.loss == 'sat' or args.loss == 'sat_entropy':
                 sacmtr.update(1-smout[:, -1], smout[:, :-1].argmax(dim=-1) == targets)
             else:
                 maxv, maxidx = outputs.max(dim=-1)
                 sacmtr.update(maxv, maxidx == targets)
 
+            output_logits.retain_grad()
+            loss.backward()
+
+            def bnorm(x):
+                return (x**2).sum(dim=[i for i in range(1,x.dim())]).sqrt()
+            epochgrad[indices.numpy()] = (bnorm(inputs.grad.cpu())/bnorm(output_logits.grad)).cpu().detach().numpy()
+            for p in model.parameters():
+                p.grad=None
 
             # measure accuracy and record loss
             if args.dataset != 'catsdogs':
