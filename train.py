@@ -403,16 +403,20 @@ def train(trainloader, model, criterion, optimizer, epoch, device):
     bar = Bar('Processing', max=len(trainloader))
     print("TrainLoader Length:", len(trainloader))
     epochembed = np.zeros((len(trainloader.dataset), num_classes if fami_ce else num_classes+1))
+    epochgrad = np.zeros((len(trainloader.dataset), num_classes if fami_ce else num_classes+1))
     for batch_idx,  batch_data in tqdm(enumerate(trainloader)):
         def closure():
             loss=criterion(model(inputs),targets)
             loss.backward()
             return loss
         inputs, targets, indices = batch_data
+        B,C,H,W=inputs.shape
         # measure data loading time
         data_time.update(time.time() - end)
         inputs, targets = inputs.to(device), targets.to(device)
         inputs, targets = torch.autograd.Variable(inputs), torch.autograd.Variable(targets)
+        grad=torch.autograd.functional.jacobian(model,inputs).reshape(B,num_classes if fami_ce else num_classes+1,-1).norm(dim=-1)
+        epochgrad[indices.numpy()] = grad.cpu().detach().numpy()
         # compute output
         outputs = model(inputs)
         epochembed[indices.numpy()] = outputs.cpu().detach().numpy()
@@ -480,7 +484,9 @@ def train(trainloader, model, criterion, optimizer, epoch, device):
     writer.add_scalar("train/loss", losses.avg, epoch)
     writer.add_scalar("train/top1", top1.avg, epoch)
     writer.add_scalar("train/sac", sacv, epoch)
+    writer.add_scalar("train/grad", epochgrad.mean(), epoch)
     embeds['train'].append(epochembed)
+    grads['train'].append(epochgrad)
     return (losses.avg, top1.avg)
 
 def test(testloader, model, criterion, epoch, device, evaluation = False):
@@ -506,14 +512,18 @@ def test(testloader, model, criterion, epoch, device, evaluation = False):
     abstention_results = []
     sr_results = []
     epochembed = np.zeros((len(testloader.dataset), num_classes if fami_ce else num_classes+1))
+    epochgrad = np.zeros((len(testloader.dataset), num_classes if fami_ce else num_classes+1))
     for batch_idx, batch_data in enumerate(testloader):
         inputs, targets, indices = batch_data
+        B,C,H,W=inputs.shape
         # measure data loading time
         data_time.update(time.time() - end)
 
         inputs = inputs.to(device)
         inputs, targets = torch.autograd.Variable(inputs), torch.autograd.Variable(targets)
 
+        grad=torch.autograd.functional.jacobian(model,inputs).reshape(B,num_classes if fami_ce else num_classes+1,-1).norm(dim=-1)
+        epochgrad[indices.numpy()] = grad.cpu().detach().numpy()
         # compute output
         with torch.no_grad():
             output_logits = model(inputs).cpu()
@@ -610,7 +620,9 @@ def test(testloader, model, criterion, epoch, device, evaluation = False):
     writer.add_scalar("test/loss", losses.avg, epoch)
     writer.add_scalar("test/top1", top1.avg, epoch)
     writer.add_scalar("test/sac", sacv, epoch)
+    writer.add_scalar("test/grad", epochgrad.mean(), epoch)
     embeds['test'].append(epochembed)
+    grads['train'].append(epochgrad)
     return (losses.avg, top1.avg)
 
 def adjust_learning_rate(optimizer, epoch):
@@ -706,6 +718,7 @@ if __name__ == '__main__':
     tfname = base_path
     writer = SummaryWriter(log_dir=f"tflog1/{tfname}")
     embeds = {'train': [], 'test': []}
+    grads = {'train': [], 'test': []}
     baseLR = state['lr']
     base_pretrain = args.pretrain
     resume_path = ""
@@ -734,3 +747,7 @@ if __name__ == '__main__':
     for phase in ["train", "test"]:
         with open(f"{save_path}/embeds_{phase}.pkl", "wb") as f:
             pkl.dump(np.concatenate(embeds[phase]), f)
+
+    for phase in ["train", "test"]:
+        with open(f"{save_path}/grads_{phase}.pkl", "wb") as f:
+            pkl.dump(np.concatenate(grads[phase]), f)
