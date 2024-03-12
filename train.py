@@ -453,12 +453,12 @@ def train(trainloader, model, criterion, optimizer, epoch, device):
             top1.update(prec1.item(), inputs.size(0))
 
         # compute gradient and do SGD step
+        optimizer.zero_grad()
         loss.backward()
 
         def bnorm(x):
             return (x**2).sum(dim=[i for i in range(1,x.dim())]).sqrt()
         epochgrad[indices.numpy()] = (bnorm(inputs.grad)/bnorm(outputs.grad)).cpu().detach().numpy()
-        optimizer.zero_grad()
         if args.optim == "sam":
             optimizer.step(closure = closure)
         else:
@@ -632,7 +632,7 @@ def test(testloader, model, criterion, epoch, device, evaluation = False):
     writer.add_scalar("test/sac", sacv, epoch)
     writer.add_scalar("test/grad", epochgrad.mean(), epoch)
     embeds['test'].append(epochembed)
-    grads['train'].append(epochgrad)
+    grads['test'].append(epochgrad)
     return (losses.avg, top1.avg)
 
 def adjust_learning_rate(optimizer, epoch):
